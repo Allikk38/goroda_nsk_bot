@@ -1,10 +1,8 @@
-#1
-
 import telebot
 import logging
 import os
 from dotenv import load_dotenv
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 
 load_dotenv()
 
@@ -21,32 +19,49 @@ bot = telebot.TeleBot(BOT_TOKEN)
 # --- ХРАНИЛИЩЕ ДАННЫХ ПОЛЬЗОВАТЕЛЕЙ ---
 user_data = {}
 
-# --- КНОПКИ ---
-def get_main_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    keyboard.add(KeyboardButton("Квартира для себя"))
-    keyboard.add(KeyboardButton("Инвестиционная квартира"))
-    keyboard.add(KeyboardButton("Хочу разместить свой объект"))
-    keyboard.add(KeyboardButton("Просто смотрю"))
+# --- INLINE КНОПКИ (под сообщениями) ---
+
+def get_main_inline_keyboard():
+    """Inline-кнопки для главного меню"""
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
+        InlineKeyboardButton("🏠 Квартира для себя", callback_data="interest_self"),
+        InlineKeyboardButton("💰 Инвестиционная квартира", callback_data="interest_invest"),
+        InlineKeyboardButton("📢 Хочу разместить свой объект", callback_data="interest_place"),
+        InlineKeyboardButton("👀 Просто смотрю", callback_data="interest_watch")
+    )
     return keyboard
 
-def get_rooms_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+def get_rooms_inline_keyboard():
+    """Inline-кнопки для выбора комнат"""
+    keyboard = InlineKeyboardMarkup(row_width=3)
+    buttons = []
     for i in range(1, 6):
-        keyboard.add(KeyboardButton(str(i)))
+        buttons.append(InlineKeyboardButton(str(i), callback_data=f"rooms_{i}"))
+    buttons.append(InlineKeyboardButton("6+", callback_data="rooms_6"))
+    keyboard.add(*buttons)
     return keyboard
 
-def get_contact_keyboard():
-    """Клавиатура с кнопкой для отправки контакта"""
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    # Кнопка с запросом контакта
-    contact_button = KeyboardButton("📱 Поделиться номером", request_contact=True)
-    keyboard.add(contact_button)
-    # Кнопка для ручного ввода
-    keyboard.add(KeyboardButton("✏️ Ввести номер вручную"))
+def get_yes_no_inline_keyboard():
+    """Inline-кнопки Да/Нет"""
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("✅ Да", callback_data="yes"),
+        InlineKeyboardButton("❌ Нет", callback_data="no")
+    )
     return keyboard
 
-# --- ОБРАБОТЧИКИ ---
+def get_contact_inline_keyboard():
+    """Inline-кнопка для отправки контакта"""
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
+        InlineKeyboardButton("📱 Поделиться номером", callback_data="share_contact"),
+        InlineKeyboardButton("✏️ Ввести номер вручную", callback_data="manual_phone")
+    )
+    return keyboard
+
+# --- ОБРАБОТЧИК КОМАНД ---
+
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     user_id = message.chat.id
@@ -64,42 +79,103 @@ def handle_start(message):
     bot.send_message(
         user_id,
         "Ответьте, пожалуйста, что вас интересует?",
-        reply_markup=get_main_keyboard()
+        reply_markup=get_main_inline_keyboard()  # Inline-кнопки
     )
 
-@bot.message_handler(func=lambda message: message.text in ["Квартира для себя", "Инвестиционная квартира", "Хочу разместить свой объект", "Просто смотрю"])
-def handle_interest(message):
-    user_id = message.chat.id
-    user_data[user_id]['interest'] = message.text
+# --- ОБРАБОТЧИК INLINE КНОПОК ---
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    user_id = call.from_user.id
+    data = call.data
     
-    # Если пользователь просто смотрит - пропускаем вопросы
-    if message.text == "Просто смотрю":
+    # Обрабатываем нажатие на кнопки
+    if data == "interest_self":
+        user_data[user_id]['interest'] = "Квартира для себя"
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        ask_budget(call.message)
+        
+    elif data == "interest_invest":
+        user_data[user_id]['interest'] = "Инвестиционная квартира"
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        ask_budget(call.message)
+        
+    elif data == "interest_place":
+        user_data[user_id]['interest'] = "Хочу разместить свой объект"
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        ask_budget(call.message)
+        
+    elif data == "interest_watch":
+        user_data[user_id]['interest'] = "Просто смотрю"
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
         bot.send_message(
             user_id,
             "✅ Отлично! Мы будем держать вас в курсе новых интересных предложений.\n"
             "Подпишитесь на наш канал, чтобы не пропустить обновления!"
         )
         user_data.pop(user_id, None)
-        return
-    
-    msg = bot.send_message(user_id, "Выше какой стоимости объекты не предлагать?")
+        
+    elif data.startswith("rooms_"):
+        rooms = data.split("_")[1]
+        user_data[user_id]['rooms'] = rooms
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        ask_district(call.message)
+        
+    elif data == "yes":
+        user_data[user_id]['mortgage'] = "Да"
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        ask_name(call.message)
+        
+    elif data == "no":
+        user_data[user_id]['mortgage'] = "Нет"
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        ask_name(call.message)
+        
+    elif data == "share_contact":
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        # Показываем кнопку запроса контакта на клавиатуре
+        request_contact_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        contact_button = KeyboardButton("📱 Отправить контакт", request_contact=True)
+        request_contact_keyboard.add(contact_button)
+        
+        msg = bot.send_message(
+            user_id,
+            "Нажмите кнопку ниже, чтобы поделиться номером телефона:",
+            reply_markup=request_contact_keyboard
+        )
+        # Сохраняем сообщение для дальнейшей обработки
+        bot.register_next_step_handler(msg, handle_contact)
+        
+    elif data == "manual_phone":
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        msg = bot.send_message(
+            user_id,
+            "Введите ваш номер телефона в формате +7XXXXXXXXXX:",
+            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True)
+        )
+        bot.register_next_step_handler(msg, handle_manual_phone)
+
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
+def ask_budget(message):
+    """Запрос бюджета"""
+    user_id = message.chat.id
+    msg = bot.send_message(user_id, "Выше какой стоимости объекты не предлагать? (Введите сумму в рублях)")
     bot.register_next_step_handler(msg, handle_budget_limit)
 
 def handle_budget_limit(message):
     user_id = message.chat.id
     user_data[user_id]['budget_limit'] = message.text
     
-    msg = bot.send_message(
+    bot.send_message(
         user_id,
         "Сколько комнат вы хотите в будущей квартире?",
-        reply_markup=get_rooms_keyboard()
+        reply_markup=get_rooms_inline_keyboard()  # Inline-кнопки
     )
-    bot.register_next_step_handler(msg, handle_rooms)
 
-def handle_rooms(message):
+def ask_district(message):
+    """Запрос района"""
     user_id = message.chat.id
-    user_data[user_id]['rooms'] = message.text
-    
     msg = bot.send_message(user_id, "Какой район для вас предпочтителен?")
     bot.register_next_step_handler(msg, handle_district)
 
@@ -107,16 +183,15 @@ def handle_district(message):
     user_id = message.chat.id
     user_data[user_id]['district'] = message.text
     
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    keyboard.add(KeyboardButton("Да"), KeyboardButton("Нет"))
-    
-    msg = bot.send_message(user_id, "Нужна ли вам ипотека?", reply_markup=keyboard)
-    bot.register_next_step_handler(msg, handle_mortgage)
+    bot.send_message(
+        user_id,
+        "Нужна ли вам ипотека?",
+        reply_markup=get_yes_no_inline_keyboard()  # Inline-кнопки
+    )
 
-def handle_mortgage(message):
+def ask_name(message):
+    """Запрос имени"""
     user_id = message.chat.id
-    user_data[user_id]['mortgage'] = message.text
-    
     msg = bot.send_message(user_id, "Как Вас зовут?")
     bot.register_next_step_handler(msg, handle_name)
 
@@ -124,29 +199,37 @@ def handle_name(message):
     user_id = message.chat.id
     user_data[user_id]['name'] = message.text
     
-    # Показываем клавиатуру с кнопкой для отправки контакта
-    msg = bot.send_message(
-        user_id, 
-        "Поделитесь своим номером телефона, и мы сразу включимся в работу!\n"
-        "Нажмите кнопку ниже или введите номер вручную:",
-        reply_markup=get_contact_keyboard()
+    # Показываем inline-кнопки для выбора способа отправки контакта
+    bot.send_message(
+        user_id,
+        "Как вы хотите поделиться номером телефона?",
+        reply_markup=get_contact_inline_keyboard()  # Inline-кнопки
     )
-    bot.register_next_step_handler(msg, handle_phone_or_contact)
 
-def handle_phone_or_contact(message):
-    """Обработчик для номера телефона (кнопка контакта или ручной ввод)"""
+# --- ОБРАБОТЧИКИ КОНТАКТОВ ---
+
+def handle_contact(message):
+    """Обработчик для отправки контакта через клавиатуру"""
     user_id = message.chat.id
     
-    # Проверяем, пришел ли контакт
     if message.contact:
-        # Если пользователь поделился контактом через кнопку
-        phone = message.contact.phone_number
-        user_data[user_id]['phone'] = phone
-        logger.info(f"Получен контакт от {user_id}: {phone}")
+        user_data[user_id]['phone'] = message.contact.phone_number
+        send_application(user_id, message)
     else:
-        # Если пользователь ввел номер вручную
-        user_data[user_id]['phone'] = message.text
-    
+        # Если пользователь не отправил контакт, а просто написал текст
+        bot.send_message(
+            user_id,
+            "Пожалуйста, используйте кнопку '📱 Отправить контакт' для отправки номера."
+        )
+
+def handle_manual_phone(message):
+    """Обработчик для ручного ввода номера"""
+    user_id = message.chat.id
+    user_data[user_id]['phone'] = message.text
+    send_application(user_id, message)
+
+def send_application(user_id, message):
+    """Отправляет заявку администратору и завершает диалог"""
     answer = (
         "📝 *Новая заявка с канала «Города»*\n\n"
         f"👤 *Имя:* {user_data[user_id].get('name', '—')}\n"
@@ -160,18 +243,30 @@ def handle_phone_or_contact(message):
         f"👤 *Username:* @{message.from_user.username or 'нет'}"
     )
     
-    bot.send_message(ADMIN_CHAT_ID, answer, parse_mode='Markdown')
+    try:
+        bot.send_message(ADMIN_CHAT_ID, answer, parse_mode='Markdown')
+        logger.info(f"Заявка отправлена администратору {ADMIN_CHAT_ID}")
+    except Exception as e:
+        logger.error(f"Ошибка отправки администратору: {e}")
+        bot.send_message(
+            user_id,
+            "⚠️ Произошла техническая ошибка. Пожалуйста, попробуйте позже."
+        )
+        user_data.pop(user_id, None)
+        return
     
+    # Убираем ReplyKeyboard если она есть
     bot.send_message(
         user_id,
         "✅ *Спасибо!* Ваши данные переданы нашему специалисту.\n"
         "Ожидайте звонка или сообщения в ближайшее время.",
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=ReplyKeyboardMarkup(resize_keyboard=True)  # Пустая клавиатура
     )
     
     user_data.pop(user_id, None)
 
-# --- ЗАПУСК БОТА (LONG POLLING) ---
+# --- ЗАПУСК БОТА ---
 if __name__ == '__main__':
     print("🚀 Бот запущен и работает через Long Polling...")
     bot.infinity_polling()
