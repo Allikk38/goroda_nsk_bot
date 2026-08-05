@@ -7,7 +7,22 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 load_dotenv()
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_CHAT_ID = int(os.getenv('ADMIN_CHAT_ID'))
+ADMIN_CHAT_IDS = os.getenv('ADMIN_CHAT_IDS')
+
+# --- ПРОВЕРКА ПЕРЕМЕННЫХ ---
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN не найден в .env файле")
+
+if not ADMIN_CHAT_IDS:
+    raise ValueError("❌ ADMIN_CHAT_IDS не найден в .env файле")
+
+# Парсим ID администраторов (могут быть через запятую или пробел)
+try:
+    ADMIN_IDS = [int(id.strip()) for id in ADMIN_CHAT_IDS.replace(',', ' ').split() if id.strip()]
+    if not ADMIN_IDS:
+        raise ValueError("❌ Не найдены ID администраторов")
+except ValueError as e:
+    raise ValueError(f"❌ ADMIN_CHAT_IDS должен содержать числа, получено: {ADMIN_CHAT_IDS}")
 
 # --- ЛОГИРОВАНИЕ ---
 logging.basicConfig(level=logging.INFO)
@@ -593,7 +608,7 @@ def handle_manual_phone(message):
     send_application(user_id, message)
 
 def send_application(user_id, message):
-    """Отправляет заявку администратору"""
+    """Отправляет заявку всем администраторам и завершает диалог"""
     interest = user_data[user_id].get('interest', '—')
     
     # Формируем сообщение в зависимости от типа заявки
@@ -629,11 +644,18 @@ def send_application(user_id, message):
             f"👤 *Username:* @{message.from_user.username or 'нет'}"
         )
     
-    try:
-        bot.send_message(ADMIN_CHAT_ID, answer, parse_mode='Markdown')
-        logger.info(f"Заявка отправлена администратору {ADMIN_CHAT_ID}")
-    except Exception as e:
-        logger.error(f"Ошибка отправки администратору: {e}")
+    # Отправляем всем администраторам
+    success_count = 0
+    for admin_id in ADMIN_IDS:
+        try:
+            bot.send_message(admin_id, answer, parse_mode='Markdown')
+            success_count += 1
+            logger.info(f"✅ Заявка отправлена администратору {admin_id}")
+        except Exception as e:
+            logger.error(f"❌ Не удалось отправить сообщение администратору {admin_id}: {e}")
+    
+    # Проверяем, удалось ли отправить хотя бы одному
+    if success_count == 0:
         bot.send_message(
             user_id,
             "⚠️ Произошла техническая ошибка. Пожалуйста, попробуйте позже."
@@ -673,7 +695,7 @@ def handle_unknown(message):
 if __name__ == '__main__':
     print("🚀 Бот запущен и работает через Long Polling...")
     print(f"📋 Токен: {BOT_TOKEN[:10]}...")
-    print(f"👤 Администратор: {ADMIN_CHAT_ID}")
+    print(f"👤 Администраторы: {ADMIN_IDS}")
     try:
         bot.infinity_polling()
     except Exception as e:
