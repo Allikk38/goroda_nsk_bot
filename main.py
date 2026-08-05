@@ -1,21 +1,18 @@
 import telebot
 import logging
 import os
-from dotenv import load_dotenv
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
-load_dotenv()
-
-# --- ПРОВЕРКА ПЕРЕМЕННЫХ ---
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+# --- ПРОВЕРКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ---
+BOT_TOKEN = os.environ.get('BOT_TOKEN')  # или os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN не найден в .env файле")
+    raise ValueError("❌ BOT_TOKEN не найден в переменных окружения")
 if ':' not in BOT_TOKEN:
     raise ValueError(f"❌ Неверный формат токена: {BOT_TOKEN}")
 
-ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
+ADMIN_CHAT_ID = os.environ.get('ADMIN_CHAT_ID')
 if not ADMIN_CHAT_ID:
-    raise ValueError("❌ ADMIN_CHAT_ID не найден в .env файле")
+    raise ValueError("❌ ADMIN_CHAT_ID не найден в переменных окружения")
 try:
     ADMIN_CHAT_ID = int(ADMIN_CHAT_ID.strip())
 except ValueError:
@@ -175,7 +172,7 @@ def handle_phone(message):
     
     user_data.pop(user_id, None)
 
-# --- ОБРАБОТКА ОШИБОК ---
+# --- ОБРАБОТКА НЕИЗВЕСТНЫХ СООБЩЕНИЙ ---
 @bot.message_handler(func=lambda message: True)
 def handle_unknown(message):
     bot.send_message(
