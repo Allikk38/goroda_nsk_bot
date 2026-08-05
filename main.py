@@ -42,6 +42,24 @@ def get_rooms_inline_keyboard():
     keyboard.add(*buttons)
     return keyboard
 
+def get_district_inline_keyboard():
+    """Inline-кнопки для выбора района Новосибирска"""
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("🏢 Центральный", callback_data="district_central"),
+        InlineKeyboardButton("🏢 Железнодорожный", callback_data="district_railway"),
+        InlineKeyboardButton("🏢 Октябрьский", callback_data="district_october"),
+        InlineKeyboardButton("🏢 Советский", callback_data="district_soviet"),
+        InlineKeyboardButton("🏢 Ленинский", callback_data="district_lenin"),
+        InlineKeyboardButton("🏢 Кировский", callback_data="district_kirov"),
+        InlineKeyboardButton("🏢 Первомайский", callback_data="district_pervomay"),
+        InlineKeyboardButton("🏢 Дзержинский", callback_data="district_dzerzhinsky"),
+        InlineKeyboardButton("🏢 Заельцовский", callback_data="district_zaeltsovsky"),
+        InlineKeyboardButton("🏢 Калининский", callback_data="district_kalinin"),
+        InlineKeyboardButton("✏️ Свой вариант", callback_data="district_other")
+    )
+    return keyboard
+
 def get_yes_no_inline_keyboard():
     """Inline-кнопки Да/Нет"""
     keyboard = InlineKeyboardMarkup(row_width=2)
@@ -114,15 +132,15 @@ def handle_callback(call):
     # Обрабатываем выбор
     if data == "interest_self":
         user_data[user_id]['interest'] = "Квартира для себя"
-        ask_budget(user_id, call.message)
+        ask_budget(user_id)
         
     elif data == "interest_invest":
         user_data[user_id]['interest'] = "Инвестиционная квартира"
-        ask_budget(user_id, call.message)
+        ask_budget(user_id)
         
     elif data == "interest_place":
         user_data[user_id]['interest'] = "Хочу разместить свой объект"
-        ask_budget(user_id, call.message)
+        ask_budget(user_id)
         
     elif data == "interest_watch":
         user_data[user_id]['interest'] = "Просто смотрю"
@@ -137,6 +155,29 @@ def handle_callback(call):
         rooms = data.split("_")[1]
         user_data[user_id]['rooms'] = rooms
         ask_district(user_id)
+        
+    elif data.startswith("district_"):
+        district = data.split("_")[1]
+        if district == "other":
+            # Если выбран "Свой вариант", просим ввести район вручную
+            msg = bot.send_message(user_id, "Напишите ваш вариант района:")
+            bot.register_next_step_handler(msg, handle_district_manual)
+        else:
+            # Сохраняем выбранный район
+            district_names = {
+                "central": "Центральный",
+                "railway": "Железнодорожный",
+                "october": "Октябрьский",
+                "soviet": "Советский",
+                "lenin": "Ленинский",
+                "kirov": "Кировский",
+                "pervomay": "Первомайский",
+                "dzerzhinsky": "Дзержинский",
+                "zaeltsovsky": "Заельцовский",
+                "kalinin": "Калининский"
+            }
+            user_data[user_id]['district'] = district_names.get(district, district)
+            ask_mortgage(user_id)
         
     elif data == "yes":
         user_data[user_id]['mortgage'] = "Да"
@@ -162,15 +203,22 @@ def handle_callback(call):
     elif data == "manual_phone":
         msg = bot.send_message(
             user_id,
-            "Введите ваш номер телефона в формате +7XXXXXXXXXX:",
-            reply_markup=ReplyKeyboardMarkup(resize_keyboard=True)
+            "Введите ваш номер телефона в формате +7XXXXXXXXXX:"
         )
         bot.register_next_step_handler(msg, handle_manual_phone)
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
-def ask_budget(user_id, message):
+def ask_budget(user_id):
     """Запрос бюджета"""
+    # Удаляем предыдущее сообщение с кнопками (если оно есть)
+    if user_id in user_data and 'question_msg_id' in user_data[user_id]:
+        try:
+            bot.delete_message(user_id, user_data[user_id]['question_msg_id'])
+            del user_data[user_id]['question_msg_id']
+        except:
+            pass
+    
     msg = bot.send_message(user_id, "Выше какой стоимости объекты не предлагать?\n(Введите сумму в рублях)")
     bot.register_next_step_handler(msg, handle_budget_limit)
 
@@ -188,7 +236,7 @@ def handle_budget_limit(message):
     user_data[user_id]['question_msg_id'] = msg.message_id
 
 def ask_district(user_id):
-    """Запрос района"""
+    """Запрос района с вариантами ответов"""
     # Удаляем предыдущее сообщение с кнопками (если оно есть)
     if user_id in user_data and 'question_msg_id' in user_data[user_id]:
         try:
@@ -197,12 +245,39 @@ def ask_district(user_id):
         except:
             pass
     
-    msg = bot.send_message(user_id, "Какой район для вас предпочтителен?")
-    bot.register_next_step_handler(msg, handle_district)
+    # Отправляем вопрос с кнопками районов
+    msg = bot.send_message(
+        user_id,
+        "Выберите предпочтительный район:",
+        reply_markup=get_district_inline_keyboard()
+    )
+    # Сохраняем ID сообщения для возможного удаления
+    user_data[user_id]['question_msg_id'] = msg.message_id
 
-def handle_district(message):
+def handle_district_manual(message):
+    """Обработчик для ручного ввода района"""
     user_id = message.chat.id
     user_data[user_id]['district'] = message.text
+    
+    # Удаляем предыдущее сообщение с кнопками (если оно есть)
+    if user_id in user_data and 'question_msg_id' in user_data[user_id]:
+        try:
+            bot.delete_message(user_id, user_data[user_id]['question_msg_id'])
+            del user_data[user_id]['question_msg_id']
+        except:
+            pass
+    
+    ask_mortgage(user_id)
+
+def ask_mortgage(user_id):
+    """Запрос ипотеки"""
+    # Удаляем предыдущее сообщение с кнопками (если оно есть)
+    if user_id in user_data and 'question_msg_id' in user_data[user_id]:
+        try:
+            bot.delete_message(user_id, user_data[user_id]['question_msg_id'])
+            del user_data[user_id]['question_msg_id']
+        except:
+            pass
     
     # Отправляем вопрос с кнопками
     msg = bot.send_message(
@@ -299,7 +374,32 @@ def send_application(user_id, message):
     
     user_data.pop(user_id, None)
 
+# --- ОБРАБОТЧИК ВСЕХ ОСТАЛЬНЫХ СООБЩЕНИЙ ---
+
+@bot.message_handler(func=lambda message: True)
+def handle_unknown(message):
+    """Обрабатывает все остальные сообщения"""
+    user_id = message.chat.id
+    
+    # Проверяем, есть ли пользователь в процессе диалога
+    if user_id in user_data:
+        bot.send_message(
+            user_id,
+            "⚠️ Пожалуйста, используйте кнопки для ответа."
+        )
+    else:
+        bot.send_message(
+            user_id,
+            "⚠️ Напишите /start чтобы начать."
+        )
+
 # --- ЗАПУСК БОТА ---
+
 if __name__ == '__main__':
     print("🚀 Бот запущен и работает через Long Polling...")
-    bot.infinity_polling()
+    print(f"📋 Токен: {BOT_TOKEN[:10]}...")
+    print(f"👤 Администратор: {ADMIN_CHAT_ID}")
+    try:
+        bot.infinity_polling()
+    except Exception as e:
+        logger.error(f"Ошибка при запуске бота: {e}")
