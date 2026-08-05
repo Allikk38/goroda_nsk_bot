@@ -67,7 +67,8 @@ def handle_start(message):
     user_id = message.chat.id
     user_data[user_id] = {}
     
-    bot.send_message(
+    # Отправляем приветственное сообщение
+    welcome_msg = bot.send_message(
         user_id,
         f"Здравствуйте, {message.from_user.first_name} | Новостройки.\n"
         "Я помощник канала «Города»\n"
@@ -76,11 +77,18 @@ def handle_start(message):
         "- Ответьте на мои вопросы о ваших пожеланиях, и мы сможем подобрать лучший вариант"
     )
     
-    bot.send_message(
+    # Сохраняем ID приветственного сообщения
+    user_data[user_id]['welcome_msg_id'] = welcome_msg.message_id
+    
+    # Отправляем вопрос с кнопками
+    question_msg = bot.send_message(
         user_id,
         "Ответьте, пожалуйста, что вас интересует?",
-        reply_markup=get_main_inline_keyboard()  # Inline-кнопки
+        reply_markup=get_main_inline_keyboard()
     )
+    
+    # Сохраняем ID сообщения с вопросом
+    user_data[user_id]['question_msg_id'] = question_msg.message_id
 
 # --- ОБРАБОТЧИК INLINE КНОПОК ---
 
@@ -89,25 +97,35 @@ def handle_callback(call):
     user_id = call.from_user.id
     data = call.data
     
-    # Обрабатываем нажатие на кнопки
+    # Удаляем сообщение с вопросом и кнопками
+    try:
+        bot.delete_message(user_id, call.message.message_id)
+    except Exception as e:
+        logger.error(f"Не удалось удалить сообщение: {e}")
+    
+    # Удаляем приветственное сообщение (если оно еще есть)
+    if user_id in user_data and 'welcome_msg_id' in user_data[user_id]:
+        try:
+            bot.delete_message(user_id, user_data[user_id]['welcome_msg_id'])
+            del user_data[user_id]['welcome_msg_id']
+        except:
+            pass
+    
+    # Обрабатываем выбор
     if data == "interest_self":
         user_data[user_id]['interest'] = "Квартира для себя"
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-        ask_budget(call.message)
+        ask_budget(user_id, call.message)
         
     elif data == "interest_invest":
         user_data[user_id]['interest'] = "Инвестиционная квартира"
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-        ask_budget(call.message)
+        ask_budget(user_id, call.message)
         
     elif data == "interest_place":
         user_data[user_id]['interest'] = "Хочу разместить свой объект"
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-        ask_budget(call.message)
+        ask_budget(user_id, call.message)
         
     elif data == "interest_watch":
         user_data[user_id]['interest'] = "Просто смотрю"
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
         bot.send_message(
             user_id,
             "✅ Отлично! Мы будем держать вас в курсе новых интересных предложений.\n"
@@ -118,21 +136,17 @@ def handle_callback(call):
     elif data.startswith("rooms_"):
         rooms = data.split("_")[1]
         user_data[user_id]['rooms'] = rooms
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-        ask_district(call.message)
+        ask_district(user_id)
         
     elif data == "yes":
         user_data[user_id]['mortgage'] = "Да"
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-        ask_name(call.message)
+        ask_name(user_id)
         
     elif data == "no":
         user_data[user_id]['mortgage'] = "Нет"
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
-        ask_name(call.message)
+        ask_name(user_id)
         
     elif data == "share_contact":
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
         # Показываем кнопку запроса контакта на клавиатуре
         request_contact_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         contact_button = KeyboardButton("📱 Отправить контакт", request_contact=True)
@@ -143,11 +157,9 @@ def handle_callback(call):
             "Нажмите кнопку ниже, чтобы поделиться номером телефона:",
             reply_markup=request_contact_keyboard
         )
-        # Сохраняем сообщение для дальнейшей обработки
         bot.register_next_step_handler(msg, handle_contact)
         
     elif data == "manual_phone":
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
         msg = bot.send_message(
             user_id,
             "Введите ваш номер телефона в формате +7XXXXXXXXXX:",
@@ -157,25 +169,34 @@ def handle_callback(call):
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
-def ask_budget(message):
+def ask_budget(user_id, message):
     """Запрос бюджета"""
-    user_id = message.chat.id
-    msg = bot.send_message(user_id, "Выше какой стоимости объекты не предлагать? (Введите сумму в рублях)")
+    msg = bot.send_message(user_id, "Выше какой стоимости объекты не предлагать?\n(Введите сумму в рублях)")
     bot.register_next_step_handler(msg, handle_budget_limit)
 
 def handle_budget_limit(message):
     user_id = message.chat.id
     user_data[user_id]['budget_limit'] = message.text
     
-    bot.send_message(
+    # Отправляем вопрос с кнопками
+    msg = bot.send_message(
         user_id,
         "Сколько комнат вы хотите в будущей квартире?",
-        reply_markup=get_rooms_inline_keyboard()  # Inline-кнопки
+        reply_markup=get_rooms_inline_keyboard()
     )
+    # Сохраняем ID сообщения для возможного удаления
+    user_data[user_id]['question_msg_id'] = msg.message_id
 
-def ask_district(message):
+def ask_district(user_id):
     """Запрос района"""
-    user_id = message.chat.id
+    # Удаляем предыдущее сообщение с кнопками (если оно есть)
+    if user_id in user_data and 'question_msg_id' in user_data[user_id]:
+        try:
+            bot.delete_message(user_id, user_data[user_id]['question_msg_id'])
+            del user_data[user_id]['question_msg_id']
+        except:
+            pass
+    
     msg = bot.send_message(user_id, "Какой район для вас предпочтителен?")
     bot.register_next_step_handler(msg, handle_district)
 
@@ -183,15 +204,25 @@ def handle_district(message):
     user_id = message.chat.id
     user_data[user_id]['district'] = message.text
     
-    bot.send_message(
+    # Отправляем вопрос с кнопками
+    msg = bot.send_message(
         user_id,
         "Нужна ли вам ипотека?",
-        reply_markup=get_yes_no_inline_keyboard()  # Inline-кнопки
+        reply_markup=get_yes_no_inline_keyboard()
     )
+    # Сохраняем ID сообщения для возможного удаления
+    user_data[user_id]['question_msg_id'] = msg.message_id
 
-def ask_name(message):
+def ask_name(user_id):
     """Запрос имени"""
-    user_id = message.chat.id
+    # Удаляем предыдущее сообщение с кнопками (если оно есть)
+    if user_id in user_data and 'question_msg_id' in user_data[user_id]:
+        try:
+            bot.delete_message(user_id, user_data[user_id]['question_msg_id'])
+            del user_data[user_id]['question_msg_id']
+        except:
+            pass
+    
     msg = bot.send_message(user_id, "Как Вас зовут?")
     bot.register_next_step_handler(msg, handle_name)
 
@@ -199,12 +230,14 @@ def handle_name(message):
     user_id = message.chat.id
     user_data[user_id]['name'] = message.text
     
-    # Показываем inline-кнопки для выбора способа отправки контакта
-    bot.send_message(
+    # Отправляем вопрос с кнопками
+    msg = bot.send_message(
         user_id,
         "Как вы хотите поделиться номером телефона?",
-        reply_markup=get_contact_inline_keyboard()  # Inline-кнопки
+        reply_markup=get_contact_inline_keyboard()
     )
+    # Сохраняем ID сообщения для возможного удаления
+    user_data[user_id]['question_msg_id'] = msg.message_id
 
 # --- ОБРАБОТЧИКИ КОНТАКТОВ ---
 
@@ -261,7 +294,7 @@ def send_application(user_id, message):
         "✅ *Спасибо!* Ваши данные переданы нашему специалисту.\n"
         "Ожидайте звонка или сообщения в ближайшее время.",
         parse_mode='Markdown',
-        reply_markup=ReplyKeyboardMarkup(resize_keyboard=True)  # Пустая клавиатура
+        reply_markup=ReplyKeyboardMarkup(resize_keyboard=True)
     )
     
     user_data.pop(user_id, None)
