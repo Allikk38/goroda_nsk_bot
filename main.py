@@ -70,11 +70,20 @@ def get_yes_no_inline_keyboard():
     return keyboard
 
 def get_contact_inline_keyboard():
-    """Inline-кнопка для отправки контакта"""
+    """Inline-кнопка для выбора способа отправки контакта"""
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         InlineKeyboardButton("📱 Поделиться номером", callback_data="share_contact"),
         InlineKeyboardButton("✏️ Ввести номер вручную", callback_data="manual_phone")
+    )
+    return keyboard
+
+def get_confirm_contact_keyboard():
+    """Inline-кнопки для подтверждения отправки контакта"""
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(
+        InlineKeyboardButton("✅ Да, отправить", callback_data="confirm_contact_yes"),
+        InlineKeyboardButton("❌ Нет, отмена", callback_data="confirm_contact_no")
     )
     return keyboard
 
@@ -188,6 +197,21 @@ def handle_callback(call):
         ask_name(user_id)
         
     elif data == "share_contact":
+        # Показываем подтверждение отправки контакта
+        msg = bot.send_message(
+            user_id,
+            "Вы действительно хотите поделиться своим номером телефона?",
+            reply_markup=get_confirm_contact_keyboard()
+        )
+        user_data[user_id]['question_msg_id'] = msg.message_id
+        
+    elif data == "confirm_contact_yes":
+        # Удаляем сообщение с подтверждением
+        try:
+            bot.delete_message(user_id, call.message.message_id)
+        except:
+            pass
+        
         # Показываем кнопку запроса контакта на клавиатуре
         request_contact_keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         contact_button = KeyboardButton("📱 Отправить контакт", request_contact=True)
@@ -199,6 +223,21 @@ def handle_callback(call):
             reply_markup=request_contact_keyboard
         )
         bot.register_next_step_handler(msg, handle_contact)
+        
+    elif data == "confirm_contact_no":
+        # Удаляем сообщение с подтверждением
+        try:
+            bot.delete_message(user_id, call.message.message_id)
+        except:
+            pass
+        
+        # Возвращаем к выбору способа отправки контакта
+        msg = bot.send_message(
+            user_id,
+            "Выберите способ отправки номера:",
+            reply_markup=get_contact_inline_keyboard()
+        )
+        user_data[user_id]['question_msg_id'] = msg.message_id
         
     elif data == "manual_phone":
         msg = bot.send_message(
