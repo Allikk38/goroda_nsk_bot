@@ -1,4 +1,3 @@
-#2
 import telebot
 import logging
 from datetime import datetime
@@ -33,7 +32,6 @@ def handle_start(message):
     
     # Проверяем, есть ли уже согласие в базе
     if get_user_consent(user_id):
-        # Если согласие уже есть, показываем главное меню
         show_main_menu(message)
         return
     
@@ -41,7 +39,6 @@ def handle_start(message):
     msg = bot.send_message(
         user_id,
         CONSENT_TEXT,
-        parse_mode='Markdown',
         reply_markup=get_consent_keyboard(),
         disable_web_page_preview=True
     )
@@ -50,11 +47,19 @@ def handle_start(message):
 @bot.message_handler(commands=['privacy'])
 def handle_privacy(message):
     """Показать политику конфиденциальности"""
-    bot.send_message(
-        message.chat.id,
-        PRIVACY_TEXT,
-        parse_mode='Markdown'
-    )
+    try:
+        bot.send_message(
+            message.chat.id,
+            PRIVACY_TEXT,
+            disable_web_page_preview=True
+        )
+        logger.info(f"✅ Команда /privacy выполнена для пользователя {message.chat.id}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка в /privacy: {e}")
+        bot.send_message(
+            message.chat.id,
+            "⚠️ Произошла ошибка при загрузке политики конфиденциальности. Попробуйте позже."
+        )
 
 @bot.message_handler(commands=['revoke'])
 def handle_revoke(message):
@@ -70,13 +75,12 @@ def handle_revoke(message):
     
     bot.send_message(
         user_id,
-        "⚠️ *Вы действительно хотите отозвать согласие на обработку персональных данных?*\n\n"
+        "⚠️ ВЫ ДЕЙСТВИТЕЛЬНО ХОТИТЕ ОТОЗВАТЬ СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ?\n\n"
         "После отзыва:\n"
         "• Все ваши данные будут удалены\n"
         "• Мы не сможем предоставлять вам услуги\n"
         "• Вы сможете начать заново через /start\n\n"
         "Подтвердите действие:",
-        parse_mode='Markdown',
         reply_markup=get_revoke_consent_keyboard()
     )
 
@@ -94,7 +98,7 @@ def handle_my_data(message):
         return
     
     # Формируем отчет
-    report = "📋 *Ваши данные в системе:*\n\n"
+    report = "📋 ВАШИ ДАННЫЕ В СИСТЕМЕ:\n\n"
     
     # Показываем только то, что есть
     fields = {
@@ -126,11 +130,11 @@ def handle_my_data(message):
         report += "Данные не заполнены\n"
     
     # Добавляем информацию о согласии
-    report += f"\n📌 *Согласие:* {'✅ Да' if user_info.get('consent_given') else '❌ Нет'}"
+    report += f"\n📌 СОГЛАСИЕ: {'✅ Да' if user_info.get('consent_given') else '❌ Нет'}"
     if user_info.get('consent_date'):
-        report += f"\n📅 *Дата согласия:* {user_info['consent_date'][:10]}"
+        report += f"\n📅 ДАТА СОГЛАСИЯ: {user_info['consent_date'][:10]}"
     
-    bot.send_message(user_id, report, parse_mode='Markdown')
+    bot.send_message(user_id, report)
 
 @bot.message_handler(commands=['delete_my_data'])
 def handle_delete_data(message):
@@ -152,9 +156,8 @@ def handle_delete_data(message):
         
         bot.send_message(
             user_id,
-            "✅ *Все ваши данные успешно удалены.*\n\n"
-            "Если захотите воспользоваться услугами снова, напишите /start.",
-            parse_mode='Markdown'
+            "✅ ВСЕ ВАШИ ДАННЫЕ УСПЕШНО УДАЛЕНЫ.\n\n"
+            "Если захотите воспользоваться услугами снова, напишите /start."
         )
     else:
         bot.send_message(
@@ -207,13 +210,11 @@ def handle_callback(call):
         # Отправляем подтверждение
         bot.send_message(
             user_id,
-            "✅ *Спасибо! Ваше согласие получено.*\n\n"
-            "Теперь мы можем обрабатывать ваши данные для подбора лучших вариантов.",
-            parse_mode='Markdown'
+            "✅ СПАСИБО! ВАШЕ СОГЛАСИЕ ПОЛУЧЕНО.\n\n"
+            "Теперь мы можем обрабатывать ваши данные для подбора лучших вариантов."
         )
         
         # Показываем главное меню
-        # Создаем объект message из callback
         class FakeMessage:
             def __init__(self, user_id, first_name):
                 self.chat = type('obj', (object,), {'id': user_id})
@@ -232,10 +233,9 @@ def handle_callback(call):
         
         bot.send_message(
             user_id,
-            "❌ *Мы не можем продолжать работу без вашего согласия.*\n\n"
+            "❌ МЫ НЕ МОЖЕМ ПРОДОЛЖАТЬ РАБОТУ БЕЗ ВАШЕГО СОГЛАСИЯ.\n\n"
             "Мы уважаем ваше право на конфиденциальность.\n"
-            "Если передумаете, просто напишите /start заново.",
-            parse_mode='Markdown'
+            "Если передумаете, просто напишите /start заново."
         )
         user_data.pop(user_id, None)
         return
@@ -251,17 +251,15 @@ def handle_callback(call):
         
         bot.send_message(
             user_id,
-            "✅ *Ваше согласие отозвано. Все данные удалены.*\n\n"
-            "Если захотите воспользоваться услугами снова, напишите /start.",
-            parse_mode='Markdown'
+            "✅ ВАШЕ СОГЛАСИЕ ОТОЗВАНО. ВСЕ ДАННЫЕ УДАЛЕНЫ.\n\n"
+            "Если захотите воспользоваться услугами снова, напишите /start."
         )
         return
         
     elif data == "revoke_cancel":
         bot.send_message(
             user_id,
-            "✅ Отзыв согласия отменен. Ваши данные сохранены.",
-            parse_mode='Markdown'
+            "✅ Отзыв согласия отменен. Ваши данные сохранены."
         )
         return
     
@@ -271,8 +269,7 @@ def handle_callback(call):
         bot.send_message(
             user_id,
             "⚠️ Для продолжения работы необходимо дать согласие на обработку данных.\n"
-            "Напишите /start для начала.",
-            parse_mode='Markdown'
+            "Напишите /start для начала."
         )
         return
     
@@ -721,8 +718,7 @@ def send_application(user_id, message):
     if not get_user_consent(user_id):
         bot.send_message(
             user_id,
-            "⚠️ Не найдено согласие на обработку данных. Пожалуйста, начните заново с /start",
-            parse_mode='Markdown'
+            "⚠️ Не найдено согласие на обработку данных. Пожалуйста, начните заново с /start"
         )
         user_data.pop(user_id, None)
         return
@@ -733,42 +729,42 @@ def send_application(user_id, message):
     if interest == "Хочу разместить свой объект":
         # Заявка на продажу
         answer = (
-            "📝 *Новая заявка на продажу!*\n\n"
-            f"👤 *Имя:* {user_data[user_id].get('name', '—')}\n"
-            f"📞 *Телефон:* {user_data[user_id].get('phone', '—')}\n"
-            f"🏠 *Тип:* {user_data[user_id].get('property_type', '—')}\n"
-            f"🛏 *Комнаты:* {user_data[user_id].get('sell_rooms', '—')}\n"
-            f"📐 *Площадь:* {user_data[user_id].get('sell_area', '—')} кв.м\n"
-            f"🏢 *Этаж:* {user_data[user_id].get('sell_floor', '—')}\n"
-            f"📍 *Район:* {user_data[user_id].get('district', '—')}\n"
-            f"🔧 *Состояние:* {user_data[user_id].get('condition', '—')}\n"
-            f"💰 *Стоимость:* {user_data[user_id].get('sell_price', '—')} ₽\n"
-            f"⏰ *Срочность:* {user_data[user_id].get('urgency', '—')}\n"
-            f"🆔 *User ID:* `{user_id}`\n"
-            f"👤 *Username:* @{message.from_user.username or 'нет'}\n"
-            f"✅ *Согласие на обработку данных:* получено"
+            "📝 НОВАЯ ЗАЯВКА НА ПРОДАЖУ!\n\n"
+            f"👤 Имя: {user_data[user_id].get('name', '—')}\n"
+            f"📞 Телефон: {user_data[user_id].get('phone', '—')}\n"
+            f"🏠 Тип: {user_data[user_id].get('property_type', '—')}\n"
+            f"🛏 Комнаты: {user_data[user_id].get('sell_rooms', '—')}\n"
+            f"📐 Площадь: {user_data[user_id].get('sell_area', '—')} кв.м\n"
+            f"🏢 Этаж: {user_data[user_id].get('sell_floor', '—')}\n"
+            f"📍 Район: {user_data[user_id].get('district', '—')}\n"
+            f"🔧 Состояние: {user_data[user_id].get('condition', '—')}\n"
+            f"💰 Стоимость: {user_data[user_id].get('sell_price', '—')} ₽\n"
+            f"⏰ Срочность: {user_data[user_id].get('urgency', '—')}\n"
+            f"🆔 User ID: {user_id}\n"
+            f"👤 Username: @{message.from_user.username or 'нет'}\n"
+            f"✅ СОГЛАСИЕ НА ОБРАБОТКУ ДАННЫХ: получено"
         )
     else:
         # Заявка на покупку
         answer = (
-            "📝 *Новая заявка на покупку!*\n\n"
-            f"👤 *Имя:* {user_data[user_id].get('name', '—')}\n"
-            f"📞 *Телефон:* {user_data[user_id].get('phone', '—')}\n"
-            f"🏠 *Интерес:* {user_data[user_id].get('interest', '—')}\n"
-            f"💰 *Бюджет до:* {user_data[user_id].get('budget_limit', '—')} ₽\n"
-            f"🛏 *Комнаты:* {user_data[user_id].get('rooms', '—')}\n"
-            f"📍 *Район:* {user_data[user_id].get('district', '—')}\n"
-            f"🏦 *Ипотека:* {user_data[user_id].get('mortgage', '—')}\n"
-            f"🆔 *User ID:* `{user_id}`\n"
-            f"👤 *Username:* @{message.from_user.username or 'нет'}\n"
-            f"✅ *Согласие на обработку данных:* получено"
+            "📝 НОВАЯ ЗАЯВКА НА ПОКУПКУ!\n\n"
+            f"👤 Имя: {user_data[user_id].get('name', '—')}\n"
+            f"📞 Телефон: {user_data[user_id].get('phone', '—')}\n"
+            f"🏠 Интерес: {user_data[user_id].get('interest', '—')}\n"
+            f"💰 Бюджет до: {user_data[user_id].get('budget_limit', '—')} ₽\n"
+            f"🛏 Комнаты: {user_data[user_id].get('rooms', '—')}\n"
+            f"📍 Район: {user_data[user_id].get('district', '—')}\n"
+            f"🏦 Ипотека: {user_data[user_id].get('mortgage', '—')}\n"
+            f"🆔 User ID: {user_id}\n"
+            f"👤 Username: @{message.from_user.username or 'нет'}\n"
+            f"✅ СОГЛАСИЕ НА ОБРАБОТКУ ДАННЫХ: получено"
         )
     
     # Отправляем всем администраторам
     success_count = 0
     for admin_id in ADMIN_IDS:
         try:
-            bot.send_message(admin_id, answer, parse_mode='Markdown')
+            bot.send_message(admin_id, answer)
             success_count += 1
             logger.info(f"✅ Заявка отправлена администратору {admin_id}")
         except Exception as e:
@@ -789,14 +785,13 @@ def send_application(user_id, message):
     
     bot.send_message(
         user_id,
-        "✅ *Спасибо!* Ваши данные переданы нашему специалисту.\n"
+        "✅ СПАСИБО! Ваши данные переданы нашему специалисту.\n"
         "Ожидайте звонка или сообщения в ближайшее время.\n\n"
-        "📌 *Важные команды:*\n"
+        "📌 ВАЖНЫЕ КОМАНДЫ:\n"
         "/privacy - политика конфиденциальности\n"
         "/mydata - посмотреть свои данные\n"
         "/revoke - отозвать согласие\n"
         "/delete_my_data - удалить все данные",
-        parse_mode='Markdown',
         reply_markup=ReplyKeyboardMarkup(resize_keyboard=True)
     )
     
