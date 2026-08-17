@@ -202,3 +202,11 @@ def get_delete_data_keyboard():
         InlineKeyboardButton("❌ Нет, отменить", callback_data="delete_cancel")
     )
     return keyboard
+def get_back_with_main_menu_reply():
+    """Кнопки 'Назад' и 'Главное меню' в Reply формате"""
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    keyboard.add(
+        KeyboardButton("🔙 Назад"),
+        KeyboardButton("🏠 Главное меню")
+    )
+    return keyboard
