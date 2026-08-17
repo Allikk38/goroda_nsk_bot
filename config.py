@@ -23,10 +23,17 @@ except ValueError as e:
     raise ValueError(f"❌ ADMIN_CHAT_IDS должен содержать числа, получено: {ADMIN_CHAT_IDS}")
 
 # --- ЛОГИРОВАНИЕ ---
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('bot.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
-# --- ТЕКСТЫ БЕЗ Markdown (чтобы избежать ошибок парсинга) ---
+# --- ТЕКСТЫ ---
 
 CONSENT_TEXT = (
     "🔒 СОГЛАСИЕ НА ОБРАБОТКУ ПЕРСОНАЛЬНЫХ ДАННЫХ\n\n"
@@ -75,4 +82,20 @@ PRIVACY_TEXT = (
     "6. КОНТАКТЫ:\n"
     "По вопросам обработки данных: @ваш_администратор\n"
     "Email: support@example.com"
+)
+
+MAIN_MENU_TEXT = (
+    "🏠 ГЛАВНОЕ МЕНЮ\n\n"
+    "Выберите действие:"
+)
+
+HELP_TEXT = (
+    "🤖 ДОСТУПНЫЕ КОМАНДЫ:\n\n"
+    "/start - Начать работу\n"
+    "/menu - Главное меню\n"
+    "/privacy - Политика конфиденциальности\n"
+    "/mydata - Мои данные\n"
+    "/revoke - Отозвать согласие\n"
+    "/delete_my_data - Удалить все данные\n"
+    "/admin - Панель администратора (только для админов)"
 )
