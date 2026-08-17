@@ -1,135 +1,28 @@
+#2
 import telebot
 import logging
-import os
-from dotenv import load_dotenv
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from datetime import datetime
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
-load_dotenv()
-
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_CHAT_IDS = os.getenv('ADMIN_CHAT_IDS')
-
-# --- ПРОВЕРКА ПЕРЕМЕННЫХ ---
-if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN не найден в .env файле")
-
-if not ADMIN_CHAT_IDS:
-    raise ValueError("❌ ADMIN_CHAT_IDS не найден в .env файле")
-
-# Парсим ID администраторов (могут быть через запятую или пробел)
-try:
-    ADMIN_IDS = [int(id.strip()) for id in ADMIN_CHAT_IDS.replace(',', ' ').split() if id.strip()]
-    if not ADMIN_IDS:
-        raise ValueError("❌ Не найдены ID администраторов")
-except ValueError as e:
-    raise ValueError(f"❌ ADMIN_CHAT_IDS должен содержать числа, получено: {ADMIN_CHAT_IDS}")
-
-# --- ЛОГИРОВАНИЕ ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from config import (
+    BOT_TOKEN, ADMIN_IDS, logger, 
+    CONSENT_TEXT, PRIVACY_TEXT
+)
+from database import (
+    init_database, save_user_data, save_consent, 
+    get_user_consent, get_user_data, delete_user_data,
+    log_user_action, cleanup_old_data
+)
+from keyboards import *
 
 # --- СОЗДАНИЕ БОТА ---
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# --- ХРАНИЛИЩЕ ДАННЫХ ПОЛЬЗОВАТЕЛЕЙ ---
+# --- ХРАНИЛИЩЕ ДАННЫХ ПОЛЬЗОВАТЕЛЕЙ (временное) ---
 user_data = {}
 
-# --- INLINE КНОПКИ ---
-
-def get_main_inline_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(
-        InlineKeyboardButton("🏠 Квартира для себя", callback_data="interest_self"),
-        InlineKeyboardButton("💰 Инвестиционная квартира", callback_data="interest_invest"),
-        InlineKeyboardButton("📢 Хочу разместить свой объект", callback_data="interest_sell"),
-        InlineKeyboardButton("👀 Просто смотрю", callback_data="interest_watch")
-    )
-    return keyboard
-
-def get_rooms_inline_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=3)
-    buttons = []
-    for i in range(1, 6):
-        buttons.append(InlineKeyboardButton(str(i), callback_data=f"rooms_{i}"))
-    buttons.append(InlineKeyboardButton("6+", callback_data="rooms_6"))
-    keyboard.add(*buttons)
-    return keyboard
-
-def get_district_inline_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("🏢 Центральный", callback_data="district_central"),
-        InlineKeyboardButton("🏢 Железнодорожный", callback_data="district_railway"),
-        InlineKeyboardButton("🏢 Октябрьский", callback_data="district_october"),
-        InlineKeyboardButton("🏢 Советский", callback_data="district_soviet"),
-        InlineKeyboardButton("🏢 Ленинский", callback_data="district_lenin"),
-        InlineKeyboardButton("🏢 Кировский", callback_data="district_kirov"),
-        InlineKeyboardButton("🏢 Первомайский", callback_data="district_pervomay"),
-        InlineKeyboardButton("🏢 Дзержинский", callback_data="district_dzerzhinsky"),
-        InlineKeyboardButton("🏢 Заельцовский", callback_data="district_zaeltsovsky"),
-        InlineKeyboardButton("🏢 Калининский", callback_data="district_kalinin"),
-        InlineKeyboardButton("✏️ Свой вариант", callback_data="district_other")
-    )
-    return keyboard
-
-def get_yes_no_inline_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("✅ Да", callback_data="yes"),
-        InlineKeyboardButton("❌ Нет", callback_data="no")
-    )
-    return keyboard
-
-def get_property_type_keyboard():
-    """Клавиатура для выбора типа недвижимости при продаже"""
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("🏠 Квартира", callback_data="prop_apartment"),
-        InlineKeyboardButton("🏡 Дом/Коттедж", callback_data="prop_house"),
-        InlineKeyboardButton("🏢 Коммерческая", callback_data="prop_commercial"),
-        InlineKeyboardButton("🏗️ Участок", callback_data="prop_land"),
-        InlineKeyboardButton("✏️ Другое", callback_data="prop_other")
-    )
-    return keyboard
-
-def get_condition_keyboard():
-    """Клавиатура для выбора состояния объекта"""
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("🔨 Требует ремонта", callback_data="condition_bad"),
-        InlineKeyboardButton("🛠️ Косметический ремонт", callback_data="condition_normal"),
-        InlineKeyboardButton("✨ Евроремонт", callback_data="condition_good"),
-        InlineKeyboardButton("🆕 Новостройка без отделки", callback_data="condition_no_finish"),
-        InlineKeyboardButton("🏗️ Новостройка с отделкой", callback_data="condition_with_finish")
-    )
-    return keyboard
-
-def get_urgency_keyboard():
-    """Клавиатура для выбора срочности продажи"""
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(
-        InlineKeyboardButton("⏰ Срочно (до 1 месяца)", callback_data="urgency_very"),
-        InlineKeyboardButton("🕐 В ближайшее время (1-3 месяца)", callback_data="urgency_soon"),
-        InlineKeyboardButton("📅 В течение 3-6 месяцев", callback_data="urgency_medium"),
-        InlineKeyboardButton("🗓️ Нет срочности (более 6 месяцев)", callback_data="urgency_no")
-    )
-    return keyboard
-
-def get_contact_inline_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(
-        InlineKeyboardButton("📱 Поделиться номером", callback_data="share_contact"),
-        InlineKeyboardButton("✏️ Ввести номер вручную", callback_data="manual_phone")
-    )
-    return keyboard
-
-def get_confirm_contact_keyboard():
-    keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.add(
-        InlineKeyboardButton("✅ Да, отправить", callback_data="confirm_contact_yes"),
-        InlineKeyboardButton("❌ Нет, отмена", callback_data="confirm_contact_no")
-    )
-    return keyboard
+# --- ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ ---
+init_database()
 
 # --- ОБРАБОТЧИК КОМАНД ---
 
@@ -137,6 +30,143 @@ def get_confirm_contact_keyboard():
 def handle_start(message):
     user_id = message.chat.id
     user_data[user_id] = {}
+    
+    # Проверяем, есть ли уже согласие в базе
+    if get_user_consent(user_id):
+        # Если согласие уже есть, показываем главное меню
+        show_main_menu(message)
+        return
+    
+    # Показываем запрос согласия
+    msg = bot.send_message(
+        user_id,
+        CONSENT_TEXT,
+        parse_mode='Markdown',
+        reply_markup=get_consent_keyboard(),
+        disable_web_page_preview=True
+    )
+    user_data[user_id]['consent_msg_id'] = msg.message_id
+
+@bot.message_handler(commands=['privacy'])
+def handle_privacy(message):
+    """Показать политику конфиденциальности"""
+    bot.send_message(
+        message.chat.id,
+        PRIVACY_TEXT,
+        parse_mode='Markdown'
+    )
+
+@bot.message_handler(commands=['revoke'])
+def handle_revoke(message):
+    """Отзыв согласия"""
+    user_id = message.chat.id
+    
+    if not get_user_consent(user_id):
+        bot.send_message(
+            user_id,
+            "❌ У вас нет активного согласия на обработку данных."
+        )
+        return
+    
+    bot.send_message(
+        user_id,
+        "⚠️ *Вы действительно хотите отозвать согласие на обработку персональных данных?*\n\n"
+        "После отзыва:\n"
+        "• Все ваши данные будут удалены\n"
+        "• Мы не сможем предоставлять вам услуги\n"
+        "• Вы сможете начать заново через /start\n\n"
+        "Подтвердите действие:",
+        parse_mode='Markdown',
+        reply_markup=get_revoke_consent_keyboard()
+    )
+
+@bot.message_handler(commands=['mydata'])
+def handle_my_data(message):
+    """Показать данные пользователя"""
+    user_id = message.chat.id
+    
+    user_info = get_user_data(user_id)
+    if not user_info:
+        bot.send_message(
+            user_id,
+            "❌ Ваши данные не найдены. Возможно, вы не давали согласие."
+        )
+        return
+    
+    # Формируем отчет
+    report = "📋 *Ваши данные в системе:*\n\n"
+    
+    # Показываем только то, что есть
+    fields = {
+        'name': '👤 Имя',
+        'phone': '📞 Телефон',
+        'interest': '🏠 Интерес',
+        'budget_limit': '💰 Бюджет до',
+        'rooms': '🛏 Комнаты',
+        'district': '📍 Район',
+        'property_type': '🏠 Тип объекта',
+        'sell_area': '📐 Площадь',
+        'sell_floor': '🏢 Этаж',
+        'condition': '🔧 Состояние',
+        'sell_price': '💰 Стоимость',
+        'urgency': '⏰ Срочность'
+    }
+    
+    has_data = False
+    for key, label in fields.items():
+        if key in user_info and user_info[key]:
+            value = user_info[key]
+            # Маскируем телефон
+            if key == 'phone' and len(str(value)) >= 10:
+                value = str(value)[:5] + '****' + str(value)[-3:]
+            report += f"{label}: {value}\n"
+            has_data = True
+    
+    if not has_data:
+        report += "Данные не заполнены\n"
+    
+    # Добавляем информацию о согласии
+    report += f"\n📌 *Согласие:* {'✅ Да' if user_info.get('consent_given') else '❌ Нет'}"
+    if user_info.get('consent_date'):
+        report += f"\n📅 *Дата согласия:* {user_info['consent_date'][:10]}"
+    
+    bot.send_message(user_id, report, parse_mode='Markdown')
+
+@bot.message_handler(commands=['delete_my_data'])
+def handle_delete_data(message):
+    """Удаление всех данных пользователя"""
+    user_id = message.chat.id
+    
+    if not get_user_consent(user_id):
+        bot.send_message(
+            user_id,
+            "❌ У вас нет данных в системе."
+        )
+        return
+    
+    # Удаляем данные из базы
+    if delete_user_data(user_id):
+        # Удаляем из временного хранилища
+        if user_id in user_data:
+            user_data.pop(user_id, None)
+        
+        bot.send_message(
+            user_id,
+            "✅ *Все ваши данные успешно удалены.*\n\n"
+            "Если захотите воспользоваться услугами снова, напишите /start.",
+            parse_mode='Markdown'
+        )
+    else:
+        bot.send_message(
+            user_id,
+            "❌ Произошла ошибка при удалении данных. Попробуйте позже."
+        )
+
+# --- ФУНКЦИЯ ПОКАЗА ГЛАВНОГО МЕНЮ ---
+
+def show_main_menu(message):
+    """Показывает главное меню после получения согласия"""
+    user_id = message.chat.id
     
     welcome_msg = bot.send_message(
         user_id,
@@ -154,7 +184,6 @@ def handle_start(message):
         "Ответьте, пожалуйста, что вас интересует?",
         reply_markup=get_main_inline_keyboard()
     )
-    
     user_data[user_id]['question_msg_id'] = question_msg.message_id
 
 # --- ОБРАБОТЧИК INLINE КНОПОК ---
@@ -163,6 +192,89 @@ def handle_start(message):
 def handle_callback(call):
     user_id = call.from_user.id
     data = call.data
+    
+    # --- ОБРАБОТКА СОГЛАСИЯ ---
+    if data == "consent_agree":
+        # Сохраняем согласие в базу
+        save_consent(user_id, True)
+        
+        try:
+            bot.delete_message(user_id, user_data[user_id]['consent_msg_id'])
+            del user_data[user_id]['consent_msg_id']
+        except:
+            pass
+        
+        # Отправляем подтверждение
+        bot.send_message(
+            user_id,
+            "✅ *Спасибо! Ваше согласие получено.*\n\n"
+            "Теперь мы можем обрабатывать ваши данные для подбора лучших вариантов.",
+            parse_mode='Markdown'
+        )
+        
+        # Показываем главное меню
+        # Создаем объект message из callback
+        class FakeMessage:
+            def __init__(self, user_id, first_name):
+                self.chat = type('obj', (object,), {'id': user_id})
+                self.from_user = type('obj', (object,), {'first_name': first_name})
+        
+        first_name = call.from_user.first_name or "Пользователь"
+        fake_msg = FakeMessage(user_id, first_name)
+        show_main_menu(fake_msg)
+        
+    elif data == "consent_disagree":
+        try:
+            bot.delete_message(user_id, user_data[user_id]['consent_msg_id'])
+            del user_data[user_id]['consent_msg_id']
+        except:
+            pass
+        
+        bot.send_message(
+            user_id,
+            "❌ *Мы не можем продолжать работу без вашего согласия.*\n\n"
+            "Мы уважаем ваше право на конфиденциальность.\n"
+            "Если передумаете, просто напишите /start заново.",
+            parse_mode='Markdown'
+        )
+        user_data.pop(user_id, None)
+        return
+    
+    # --- ОБРАБОТКА ОТЗЫВА СОГЛАСИЯ ---
+    elif data == "revoke_confirm":
+        # Отзываем согласие и удаляем данные
+        save_consent(user_id, False)
+        delete_user_data(user_id)
+        
+        if user_id in user_data:
+            user_data.pop(user_id, None)
+        
+        bot.send_message(
+            user_id,
+            "✅ *Ваше согласие отозвано. Все данные удалены.*\n\n"
+            "Если захотите воспользоваться услугами снова, напишите /start.",
+            parse_mode='Markdown'
+        )
+        return
+        
+    elif data == "revoke_cancel":
+        bot.send_message(
+            user_id,
+            "✅ Отзыв согласия отменен. Ваши данные сохранены.",
+            parse_mode='Markdown'
+        )
+        return
+    
+    # --- ДАЛЬНЕЙШАЯ ОБРАБОТКА ТОЛЬКО С СОГЛАСИЕМ ---
+    # Проверяем наличие согласия
+    if not get_user_consent(user_id):
+        bot.send_message(
+            user_id,
+            "⚠️ Для продолжения работы необходимо дать согласие на обработку данных.\n"
+            "Напишите /start для начала.",
+            parse_mode='Markdown'
+        )
+        return
     
     try:
         bot.delete_message(user_id, call.message.message_id)
@@ -248,11 +360,9 @@ def handle_callback(call):
         }
         user_data[user_id]['property_type'] = property_names.get(property_type, property_type)
         
-        # Если квартира, спрашиваем комнаты
         if property_type == "apartment":
             ask_sell_rooms(user_id)
         else:
-            # Для других типов сразу спрашиваем площадь
             ask_sell_area(user_id)
     
     elif data.startswith("sell_rooms_"):
@@ -457,7 +567,6 @@ def ask_sell_area(user_id):
 def handle_sell_area(message):
     user_id = message.chat.id
     user_data[user_id]['sell_area'] = message.text
-    
     ask_sell_floor(message)
 
 def ask_sell_floor(message):
@@ -474,7 +583,6 @@ def ask_sell_floor(message):
 def handle_sell_floor(message):
     user_id = message.chat.id
     user_data[user_id]['sell_floor'] = message.text
-    
     ask_sell_district(user_id)
 
 def ask_sell_district(user_id):
@@ -528,7 +636,6 @@ def ask_sell_price(user_id):
 def handle_sell_price(message):
     user_id = message.chat.id
     user_data[user_id]['sell_price'] = message.text
-    
     ask_sell_urgency(user_id)
 
 def ask_sell_urgency(user_id):
@@ -609,6 +716,17 @@ def handle_manual_phone(message):
 
 def send_application(user_id, message):
     """Отправляет заявку всем администраторам и завершает диалог"""
+    
+    # Проверяем наличие согласия в базе
+    if not get_user_consent(user_id):
+        bot.send_message(
+            user_id,
+            "⚠️ Не найдено согласие на обработку данных. Пожалуйста, начните заново с /start",
+            parse_mode='Markdown'
+        )
+        user_data.pop(user_id, None)
+        return
+    
     interest = user_data[user_id].get('interest', '—')
     
     # Формируем сообщение в зависимости от типа заявки
@@ -627,7 +745,8 @@ def send_application(user_id, message):
             f"💰 *Стоимость:* {user_data[user_id].get('sell_price', '—')} ₽\n"
             f"⏰ *Срочность:* {user_data[user_id].get('urgency', '—')}\n"
             f"🆔 *User ID:* `{user_id}`\n"
-            f"👤 *Username:* @{message.from_user.username or 'нет'}"
+            f"👤 *Username:* @{message.from_user.username or 'нет'}\n"
+            f"✅ *Согласие на обработку данных:* получено"
         )
     else:
         # Заявка на покупку
@@ -641,7 +760,8 @@ def send_application(user_id, message):
             f"📍 *Район:* {user_data[user_id].get('district', '—')}\n"
             f"🏦 *Ипотека:* {user_data[user_id].get('mortgage', '—')}\n"
             f"🆔 *User ID:* `{user_id}`\n"
-            f"👤 *Username:* @{message.from_user.username or 'нет'}"
+            f"👤 *Username:* @{message.from_user.username or 'нет'}\n"
+            f"✅ *Согласие на обработку данных:* получено"
         )
     
     # Отправляем всем администраторам
@@ -653,6 +773,10 @@ def send_application(user_id, message):
             logger.info(f"✅ Заявка отправлена администратору {admin_id}")
         except Exception as e:
             logger.error(f"❌ Не удалось отправить сообщение администратору {admin_id}: {e}")
+    
+    # Сохраняем данные в базу
+    save_user_data(user_id, user_data[user_id])
+    log_user_action(user_id, "application_sent")
     
     # Проверяем, удалось ли отправить хотя бы одному
     if success_count == 0:
@@ -666,7 +790,12 @@ def send_application(user_id, message):
     bot.send_message(
         user_id,
         "✅ *Спасибо!* Ваши данные переданы нашему специалисту.\n"
-        "Ожидайте звонка или сообщения в ближайшее время.",
+        "Ожидайте звонка или сообщения в ближайшее время.\n\n"
+        "📌 *Важные команды:*\n"
+        "/privacy - политика конфиденциальности\n"
+        "/mydata - посмотреть свои данные\n"
+        "/revoke - отозвать согласие\n"
+        "/delete_my_data - удалить все данные",
         parse_mode='Markdown',
         reply_markup=ReplyKeyboardMarkup(resize_keyboard=True)
     )
@@ -680,6 +809,15 @@ def handle_unknown(message):
     user_id = message.chat.id
     
     if user_id in user_data:
+        # Проверяем, есть ли согласие
+        if not get_user_consent(user_id):
+            bot.send_message(
+                user_id,
+                "⚠️ Для работы бота необходимо дать согласие на обработку данных.\n"
+                "Напишите /start для начала."
+            )
+            return
+        
         bot.send_message(
             user_id,
             "⚠️ Пожалуйста, используйте кнопки для ответа."
@@ -696,6 +834,31 @@ if __name__ == '__main__':
     print("🚀 Бот запущен и работает через Long Polling...")
     print(f"📋 Токен: {BOT_TOKEN[:10]}...")
     print(f"👤 Администраторы: {ADMIN_IDS}")
+    print("📌 Доступные команды:")
+    print("  /start - начать работу")
+    print("  /privacy - политика конфиденциальности")
+    print("  /mydata - посмотреть свои данные")
+    print("  /revoke - отозвать согласие")
+    print("  /delete_my_data - удалить все данные")
+    
+    # Периодическая очистка старых данных (в фоне)
+    import threading
+    import time
+    
+    def cleanup_scheduler():
+        while True:
+            try:
+                time.sleep(30 * 24 * 60 * 60)  # Раз в месяц
+                deleted = cleanup_old_data()
+                if deleted > 0:
+                    logger.info(f"🧹 Очищено {deleted} старых записей")
+            except Exception as e:
+                logger.error(f"❌ Ошибка в планировщике очистки: {e}")
+    
+    # Запускаем очистку в фоновом потоке
+    cleanup_thread = threading.Thread(target=cleanup_scheduler, daemon=True)
+    cleanup_thread.start()
+    
     try:
         bot.infinity_polling()
     except Exception as e:
