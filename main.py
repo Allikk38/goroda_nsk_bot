@@ -167,13 +167,27 @@ def handle_help(message):
 def handle_privacy(message):
     """Показать политику конфиденциальности"""
     user_id = message.chat.id
+    
+    # Проверяем, есть ли согласие
+    has_consent = get_user_consent(user_id)
+    
     try:
-        bot.send_message(
-            user_id,
-            PRIVACY_TEXT,
-            disable_web_page_preview=True,
-            reply_markup=get_main_menu_keyboard() if get_user_consent(user_id) else ReplyKeyboardRemove()
-        )
+        if has_consent:
+            # Если согласие есть - показываем с главным меню
+            bot.send_message(
+                user_id,
+                PRIVACY_TEXT,
+                disable_web_page_preview=True,
+                reply_markup=get_main_menu_keyboard()
+            )
+        else:
+            # Если согласия нет - показываем с кнопкой "Назад к согласию"
+            bot.send_message(
+                user_id,
+                PRIVACY_TEXT,
+                disable_web_page_preview=True,
+                reply_markup=get_back_to_consent_keyboard()
+            )
         logger.info(f"✅ Команда /privacy выполнена для пользователя {user_id}")
     except Exception as e:
         logger.error(f"❌ Ошибка в /privacy: {e}")
@@ -517,6 +531,20 @@ def handle_callback(call):
             "Если передумаете, просто напишите /start заново."
         )
         state_manager.clear_state(user_id)
+        return
+    
+    # ==================== ОБРАБОТКА ВОЗВРАТА К СОГЛАСИЮ ====================
+    elif data == "back_to_consent":
+        safe_delete_message(user_id, call.message.message_id)
+        
+        # Показываем заново экран согласия
+        msg = bot.send_message(
+            user_id,
+            CONSENT_TEXT,
+            reply_markup=get_consent_keyboard(),
+            disable_web_page_preview=True
+        )
+        state_manager.delete_message_ids(user_id, msg.message_id)
         return
     
     # ==================== ОБРАБОТКА ОТЗЫВА СОГЛАСИЯ ====================
@@ -1255,7 +1283,7 @@ def send_application(user_id, message):
             f"📍 Район: {user_data.get('district', '—')}\n"
             f"🏦 Ипотека: {user_data.get('mortgage', '—')}\n"
             f"🆔 User ID: {user_id}\n"
-            f"👤 Username: @{message.from_user.username or 'нет'}\n"
+            f"👤 Username: @{message.from_user.username или 'нет'}\n"
             f"✅ СОГЛАСИЕ НА ОБРАБОТКУ ДАННЫХ: получено"
         )
     

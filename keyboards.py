@@ -202,11 +202,22 @@ def get_delete_data_keyboard():
         InlineKeyboardButton("❌ Нет, отменить", callback_data="delete_cancel")
     )
     return keyboard
+
 def get_back_with_main_menu_reply():
     """Кнопки 'Назад' и 'Главное меню' в Reply формате"""
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     keyboard.add(
         KeyboardButton("🔙 Назад"),
         KeyboardButton("🏠 Главное меню")
+    )
+    return keyboard
+
+# Добавьте эту функцию в конец файла keyboards.py
+
+def get_back_to_consent_keyboard():
+    """Клавиатура для возврата к согласию (для политики конфиденциальности)"""
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(
+        InlineKeyboardButton("🔙 Назад к согласию", callback_data="back_to_consent")
     )
     return keyboard
