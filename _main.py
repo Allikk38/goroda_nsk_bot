@@ -41,29 +41,13 @@ def safe_delete_message(user_id: int, message_id: int):
         logger.debug(f"Не удалось удалить сообщение {message_id}: {e}")
 
 def remove_keyboard(user_id: int):
-    """Убирает клавиатуру у пользователя без отправки лишних сообщений"""
+    """Убирает клавиатуру у пользователя"""
     try:
         bot.send_message(
             user_id,
-            "",  # Пустое сообщение для скрытия клавиатуры
+            "⌨️ Клавиатура скрыта",
             reply_markup=ReplyKeyboardRemove()
         )
-        # Удаляем это пустое сообщение, чтобы не засорять чат
-        # Но нужно получить message_id, для этого используем другой подход
-    except Exception as e:
-        logger.debug(f"Не удалось скрыть клавиатуру: {e}")
-
-def remove_keyboard_silent(user_id: int):
-    """Убирает клавиатуру без отправки видимого сообщения"""
-    try:
-        # Отправляем пустое сообщение и сразу удаляем его
-        msg = bot.send_message(
-            user_id,
-            ".",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        # Удаляем это служебное сообщение
-        safe_delete_message(user_id, msg.message_id)
     except Exception as e:
         logger.debug(f"Не удалось скрыть клавиатуру: {e}")
 
@@ -74,8 +58,8 @@ def send_main_menu(message):
     if hasattr(message, 'chat'):
         user_id = message.chat.id
     
-    # Убираем старую клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем старую клавиатуру перед отправкой новой
+    remove_keyboard(user_id)
     
     bot.send_message(
         user_id,
@@ -92,8 +76,8 @@ def show_main_menu_inline(user_id, first_name=None):
         except:
             first_name = "Пользователь"
     
-    # Убираем старую клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем старую клавиатуру
+    remove_keyboard(user_id)
     
     # Очищаем состояние
     state_manager.clear_state(user_id)
@@ -122,8 +106,8 @@ def show_main_menu_inline(user_id, first_name=None):
 def handle_start(message):
     user_id = message.chat.id
     
-    # Убираем старую клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем старую клавиатуру
+    remove_keyboard(user_id)
     
     state_manager.clear_state(user_id)
     
@@ -147,7 +131,7 @@ def handle_menu(message):
     user_id = message.chat.id
     
     if not get_user_consent(user_id):
-        remove_keyboard_silent(user_id)
+        remove_keyboard(user_id)
         bot.send_message(
             user_id,
             "⚠️ Для работы бота необходимо дать согласие на обработку данных.\n"
@@ -302,8 +286,8 @@ def handle_admin(message):
         )
         return
     
-    # Убираем старую клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем старую клавиатуру
+    remove_keyboard(user_id)
     
     bot.send_message(
         user_id,
@@ -318,7 +302,7 @@ def handle_admin(message):
 def handle_main_menu_button(message):
     user_id = message.chat.id
     if not get_user_consent(user_id):
-        remove_keyboard_silent(user_id)
+        remove_keyboard(user_id)
         bot.send_message(
             user_id,
             "⚠️ Для работы бота необходимо дать согласие на обработку данных.\n"
@@ -347,8 +331,8 @@ def handle_delete_button(message):
 def handle_restart(message):
     user_id = message.chat.id
     
-    # Убираем клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем клавиатуру
+    remove_keyboard(user_id)
     
     # Удаляем все данные и состояние
     if get_user_consent(user_id):
@@ -369,7 +353,7 @@ def handle_back_button(message):
     if get_user_consent(user_id):
         send_main_menu(message)
     else:
-        remove_keyboard_silent(user_id)
+        remove_keyboard(user_id)
         bot.send_message(
             user_id,
             "⚠️ Напишите /start для начала работы."
@@ -507,8 +491,8 @@ def handle_callback(call):
     elif data == "consent_disagree":
         safe_delete_message(user_id, call.message.message_id)
         
-        # Убираем клавиатуру без отправки сообщения
-        remove_keyboard_silent(user_id)
+        # Убираем клавиатуру
+        remove_keyboard(user_id)
         
         bot.send_message(
             user_id,
@@ -527,8 +511,8 @@ def handle_callback(call):
         
         safe_delete_message(user_id, call.message.message_id)
         
-        # Убираем клавиатуру без отправки сообщения
-        remove_keyboard_silent(user_id)
+        # Убираем клавиатуру
+        remove_keyboard(user_id)
         
         bot.send_message(
             user_id,
@@ -552,8 +536,8 @@ def handle_callback(call):
             state_manager.clear_state(user_id)
             safe_delete_message(user_id, call.message.message_id)
             
-            # Убираем клавиатуру без отправки сообщения
-            remove_keyboard_silent(user_id)
+            # Убираем клавиатуру
+            remove_keyboard(user_id)
             
             bot.send_message(
                 user_id,
@@ -646,7 +630,7 @@ def handle_callback(call):
     
     # ==================== ДАЛЬНЕЙШАЯ ОБРАБОТКА (ПРОВЕРКА СОГЛАСИЯ) ====================
     if not get_user_consent(user_id):
-        remove_keyboard_silent(user_id)
+        remove_keyboard(user_id)
         bot.send_message(
             user_id,
             "⚠️ Для продолжения работы необходимо дать согласие на обработку данных.\n"
@@ -681,8 +665,8 @@ def handle_callback(call):
         save_user_data(user_id, state_manager.get_all_data(user_id))
         log_user_action(user_id, "application_sent")
         
-        # Убираем inline клавиатуру без отправки сообщения
-        remove_keyboard_silent(user_id)
+        # Убираем inline клавиатуру
+        remove_keyboard(user_id)
         
         bot.send_message(
             user_id,
@@ -704,7 +688,7 @@ def handle_callback(call):
         if district == "other":
             safe_delete_message(user_id, call.message.message_id)
             # Убираем inline клавиатуру, показываем Reply с кнопкой "Назад"
-            remove_keyboard_silent(user_id)
+            remove_keyboard(user_id)
             msg = bot.send_message(
                 user_id,
                 "✏️ Напишите ваш вариант района:\n(или нажмите /cancel для отмены)",
@@ -816,7 +800,7 @@ def handle_callback(call):
     elif data == "manual_phone":
         safe_delete_message(user_id, call.message.message_id)
         # Убираем inline клавиатуру, показываем Reply с кнопкой "Назад"
-        remove_keyboard_silent(user_id)
+        remove_keyboard(user_id)
         msg = bot.send_message(
             user_id,
             "✏️ Введите ваш номер телефона в формате +7XXXXXXXXXX:",
@@ -829,8 +813,8 @@ def handle_callback(call):
 def ask_budget(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем старую клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем старую клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -859,8 +843,8 @@ def handle_budget_limit(message):
 def ask_rooms(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -872,8 +856,8 @@ def ask_rooms(user_id):
 def ask_district(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -900,8 +884,8 @@ def handle_district_manual(message):
 def ask_mortgage(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -915,8 +899,8 @@ def ask_mortgage(user_id):
 def ask_property_type(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -928,8 +912,8 @@ def ask_property_type(user_id):
 def ask_sell_rooms(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -941,8 +925,8 @@ def ask_sell_rooms(user_id):
 def ask_sell_area(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -971,8 +955,8 @@ def handle_sell_area(message):
 def ask_sell_floor(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -1001,8 +985,8 @@ def handle_sell_floor(message):
 def ask_sell_district(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -1014,8 +998,8 @@ def ask_sell_district(user_id):
 def ask_sell_condition(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -1027,8 +1011,8 @@ def ask_sell_condition(user_id):
 def ask_sell_price(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -1057,8 +1041,8 @@ def handle_sell_price(message):
 def ask_sell_urgency(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -1075,8 +1059,8 @@ def ask_sell_phone(user_id):
 def ask_name(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -1104,8 +1088,8 @@ def handle_name(message):
 def ask_contact(user_id):
     safe_delete_question_message(user_id)
     
-    # Убираем Reply клавиатуру без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем Reply клавиатуру
+    remove_keyboard(user_id)
     
     msg = bot.send_message(
         user_id,
@@ -1214,7 +1198,7 @@ def send_application(user_id, message):
     """Отправляет заявку всем администраторам и завершает диалог"""
     
     if not get_user_consent(user_id):
-        remove_keyboard_silent(user_id)
+        remove_keyboard(user_id)
         bot.send_message(
             user_id,
             "⚠️ Не найдено согласие на обработку данных. Пожалуйста, начните заново с /start",
@@ -1275,7 +1259,7 @@ def send_application(user_id, message):
     
     # Проверяем, удалось ли отправить хотя бы одному
     if success_count == 0:
-        remove_keyboard_silent(user_id)
+        remove_keyboard(user_id)
         bot.send_message(
             user_id,
             "⚠️ Произошла техническая ошибка. Пожалуйста, попробуйте позже.",
@@ -1284,8 +1268,8 @@ def send_application(user_id, message):
         state_manager.clear_state(user_id)
         return
     
-    # Убираем старую клавиатуру (кнопка "Отправить контакт") без отправки сообщения
-    remove_keyboard_silent(user_id)
+    # Убираем старую клавиатуру (кнопка "Отправить контакт")
+    remove_keyboard(user_id)
     
     bot.send_message(
         user_id,
@@ -1323,7 +1307,7 @@ def handle_unknown(message):
     
     if user_id in state_manager._states:
         if not get_user_consent(user_id):
-            remove_keyboard_silent(user_id)
+            remove_keyboard(user_id)
             bot.send_message(
                 user_id,
                 "⚠️ Для работы бота необходимо дать согласие на обработку данных.\n"
@@ -1337,7 +1321,7 @@ def handle_unknown(message):
             reply_markup=get_main_menu_keyboard()
         )
     else:
-        remove_keyboard_silent(user_id)
+        remove_keyboard(user_id)
         bot.send_message(
             user_id,
             "⚠️ Напишите /start чтобы начать."
