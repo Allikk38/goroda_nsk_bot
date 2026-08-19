@@ -1283,7 +1283,7 @@ def send_application(user_id, message):
             f"📍 Район: {user_data.get('district', '—')}\n"
             f"🏦 Ипотека: {user_data.get('mortgage', '—')}\n"
             f"🆔 User ID: {user_id}\n"
-            f"👤 Username: @{message.from_user.username или 'нет'}\n"
+            f"👤 Username: @{message.from_user.username or 'нет'}\n"
             f"✅ СОГЛАСИЕ НА ОБРАБОТКУ ДАННЫХ: получено"
         )
     
